@@ -1,0 +1,109 @@
+name: CTP Sign AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_url:
+        description: 'Temporary URL for the unsigned AAB'
+        required: true
+        type: string
+      store_url:
+        description: 'Temporary URL for the keystore'
+        required: true
+        type: string
+      bundle_name:
+        description: 'Uploaded AAB filename'
+        required: true
+        type: string
+      store_name:
+        description: 'Uploaded keystore filename'
+        required: true
+        type: string
+      store_password:
+        description: 'Keystore store password'
+        required: true
+        type: string
+      key_alias:
+        description: 'Key alias inside the keystore'
+        required: true
+        type: string
+      key_password:
+        description: 'Private key password'
+        required: true
+        type: string
+
+jobs:
+  sign-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Hide credentials from logs
+        run: |
+          echo "::add-mask::${{ inputs.store_password }}"
+          echo "::add-mask::${{ inputs.key_password }}"
+
+      - name: Fetch uploaded files
+        run: |
+          curl -fsSL "${{ inputs.bundle_url }}"  -o bundle.aab
+          curl -fsSL "${{ inputs.store_url }}"   -o store.keystore
+          echo "bundle:    $(stat --printf='%s' bundle.aab) bytes"
+          echo "keystore:  $(stat --printf='%s' store.keystore) bytes"
+
+      - name: Install JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Validate keystore
+        env:
+          SP: ${{ inputs.store_password }}
+        run: |
+          if ! keytool -list -keystore store.keystore -storepass:env SP >/dev/null 2>&1; then
+            echo "::error::Keystore password is wrong or file is corrupt"
+            exit 1
+          fi
+          echo "keystore valid"
+
+      - name: Sign with jarsigner
+        env:
+          SP: ${{ inputs.store_password }}
+          KP: ${{ inputs.key_password }}
+          KA: ${{ inputs.key_alias }}
+        run: |
+          if ! jarsigner \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore store.keystore \
+            -storepass:env SP \
+            -keypass:env KP \
+            -signedjar signed.aab \
+            bundle.aab \
+            "$KA" >/dev/null 2>&1; then
+            echo "::error::Signing failed — check alias and key password"
+            exit 1
+          fi
+          echo "signing complete"
+
+      - name: Confirm signature
+        run: |
+          if ! jarsigner -verify signed.aab >/dev/null 2>&1; then
+            echo "::error::Signature verification failed"
+            exit 1
+          fi
+          echo "signature OK"
+
+      - name: Publish signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctp-signed-aab
+          path: signed.aab
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Scrub workspace
+        if: always()
+        run: |
+          rm -f bundle.aab store.keystore signed.aab *.jks *.keystore *.p12 *.pfx unsigned.aab 2>/dev/null || true
+          echo "workspace clean"

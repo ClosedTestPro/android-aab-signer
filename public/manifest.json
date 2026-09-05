@@ -1,0 +1,26 @@
+{
+  "name": "Closed Test Pro AAB Signer",
+  "short_name": "CTP AAB Signer",
+  "description": "Free online tool to sign Android App Bundles for Google Play. Built by Closed Test Pro.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait-primary",
+  "categories": ["developer", "utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "prefer_related_applications": false
+}
